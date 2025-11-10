@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EUR/USD OTC - WISI Live</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .price { font-size: 3.5rem; font-weight: bold; letter-spacing: 1px; }
+    .up { color: #10b981; animation: pulse 0.3s; }
+    .down { color: #ef4444; animation: pulse 0.3s; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-black text-white min-h-screen flex items-center justify-center p-6">
+
+  <div class="text-center bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl shadow-2xl border border-gray-700 max-w-lg w-full">
+    <h1 class="text-3xl font-bold mb-6 text-cyan-400 tracking-wide">EUR/USD OTC - WISI</h1>
+    
+    <div id="price" class="price text-cyan-300">--.-----</div>
+    <div id="change" class="text-lg mt-3 font-medium">Conectando...</div>
+    
+    <div class="mt-8 text-sm text-gray-400 space-y-1">
+      <div>Última actualización: <span id="time">--:--:--</span></div>
+      <div class="font-mono text-xs">Servidor: 47.251.102.225:8080</div>
+    </div>
+  </div>
+
+  <script>
+    const WS_URL = 'ws://47.251.102.225:8080';
+    const socket = new WebSocket(WS_URL);
+
+    const priceEl = document.getElementById('price');
+    const changeEl = document.getElementById('change');
+    const timeEl = document.getElementById('time');
+
+    let lastPrice = null;
+
+    socket.addEventListener('open', () => {
+      console.log('Conectado a WISI OTC');
+      changeEl.textContent = 'Conectado';
+      changeEl.className = 'text-lg mt-3 font-medium text-cyan-400';
+    });
+
+    socket.addEventListener('message', (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (!msg.payload) return;
+
+        const payload = msg.payload;  // FIXED: era "dikk" → ahora "payload"
+        if (typeof payload !== 'string') return;
+
+        let decoded;
+        try { 
+          decoded = atob(payload); 
+        } catch { 
+          return; 
+        }
+
+        let data;
+        try { 
+          data = JSON.parse(decoded); 
+        } catch { 
+          return; 
+        }
+
+        if (!Array.isArray(data) || !Array.isArray(data[0]) || data[0].length < 3) return;
+
+        const [symbol, ts, priceRaw] = data[0];
+        if (symbol !== 'EURUSD_otc') return;
+
+        const price = parseFloat(priceRaw).toFixed(5);
+        const date = new Date(ts * 1000);
+        const timeStr = date.toLocaleTimeString('es-ES', { hour12: false });
+
+        // Actualizar UI
+        priceEl.textContent = price;
+        timeEl.textContent = timeStr;
+
+        // Cambio
+        if (lastPrice !== null) {
+          const diff = (price - lastPrice).toFixed(5);
+          const isUp = diff > 0;
+          const isDown = diff < 0;
+
+          changeEl.innerHTML = `${isUp ? 'up' : isDown ? 'down' : ''} ${Math.abs(diff)}`;
+          changeEl.className = `text-lg mt-3 font-medium ${isUp ? 'up text-green-500' : isDown ? 'down text-red-500' : 'text-gray-500'}`;
+        }
+
+        lastPrice = price;
+
+      } catch (e) {
+        // Silencio en errores
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      changeEl.textContent = 'Desconectado';
+      changeEl.className = 'text-lg mt-3 font-medium text-red-500';
+      setTimeout(() => location.reload(), 3000);
+    });
+
+    socket.addEventListener('error', () => {
+      changeEl.textContent = 'Error de conexión';
+      changeEl.className = 'text-red-500';
+    });
+  </script>
+</body>
+</html>
